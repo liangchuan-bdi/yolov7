@@ -128,6 +128,10 @@ class IDetect(nn.Module):
         z = []  # inference output
         self.training |= self.export
         for i in range(self.nl):
+            if os.getenv('RKNN_model_hack', '0') != '0':
+                z.append(torch.sigmoid(self.m[i](self.ia[i](x[i]))))
+                continue
+
             x[i] = self.m[i](self.ia[i](x[i]))  # conv
             x[i] = self.im[i](x[i])
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
@@ -142,6 +146,9 @@ class IDetect(nn.Module):
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 z.append(y.view(bs, -1, self.no))
 
+        if os.getenv('RKNN_model_hack', '0') != '0':
+            return z
+
         return x if self.training else (torch.cat(z, 1), x)
     
     def fuseforward(self, x):
@@ -149,6 +156,10 @@ class IDetect(nn.Module):
         z = []  # inference output
         self.training |= self.export
         for i in range(self.nl):
+            if os.getenv('RKNN_model_hack', '0') != '0':
+                z.append(torch.sigmoid(self.m[i](x[i])))
+                continue
+
             x[i] = self.m[i](x[i])  # conv
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
@@ -167,6 +178,9 @@ class IDetect(nn.Module):
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
                     y = torch.cat((xy, wh, conf), 4)
                 z.append(y.view(bs, -1, self.no))
+
+        if os.getenv('RKNN_model_hack', '0') != '0':
+            return z
 
         if self.training:
             out = x

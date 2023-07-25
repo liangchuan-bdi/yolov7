@@ -79,15 +79,15 @@ if __name__ == '__main__':
         #     m.forward = m.forward_export  # assign forward (optional)
     model.model[-1].export = not opt.grid  # set Detect() layer grid export
     if os.getenv('RKNN_model_hack', '0') != '0':
-        if os.getenv('RKNN_model_hack', '0') in ['npu_1']:
+        if os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
             from models.common import SP
             for k, m in model.named_modules():
                 if isinstance(m, SP) and m.m.kernel_size%2==1 and m.m.stride==1:
                     new_sp = nn.Sequential(*[nn.MaxPool2d(3,1,1) for i in range(m.m.kernel_size//2)])
                     m.m = new_sp
 
-        from models.yolo import Detect
-        if isinstance(model.model[-1], Detect):
+        from models.yolo import Detect, IDetect
+        if isinstance(model.model[-1], Detect) or isinstance(model.model[-1], IDetect):
             # save anchors
             print('---> save anchors for RKNN')
             RK_anchors = model.model[-1].stride.reshape(3,1).repeat(1,3).reshape(-1,1)* model.model[-1].anchors.reshape(9,2)
@@ -136,6 +136,7 @@ if __name__ == '__main__':
         print('CoreML export failure: %s' % e)
                      
     # TorchScript-Lite export
+    '''
     try:
         print('\nStarting TorchScript-Lite export with torch %s...' % torch.__version__)
         f = opt.weights.replace('.pt', '.torchscript.ptl')  # filename
@@ -145,8 +146,10 @@ if __name__ == '__main__':
         print('TorchScript-Lite export success, saved as %s' % f)
     except Exception as e:
         print('TorchScript-Lite export failure: %s' % e)
+    '''
 
     # ONNX export
+    '''
     try:
         import onnx
 
@@ -233,6 +236,7 @@ if __name__ == '__main__':
 
     except Exception as e:
         print('ONNX export failure: %s' % e)
+    '''
 
     # Finish
     print('\nExport complete (%.2fs). Visualize with https://github.com/lutzroeder/netron.' % (time.time() - t))

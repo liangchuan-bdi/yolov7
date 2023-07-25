@@ -863,7 +863,7 @@ class Focus(nn.Module):
         return self.conv(torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1))
         # return self.conv(self.contract(x))
 
-if os.getenv('RKNN_model_hack', '0') in ['0','npu_2']:
+if os.getenv('RKNN_model_hack', '0') in ['0']:
     class SPPF(nn.Module):
         # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher
         def __init__(self, c1, c2, k=5):  # equivalent to SPP(k=(5, 9, 13))
@@ -878,7 +878,7 @@ if os.getenv('RKNN_model_hack', '0') in ['0','npu_2']:
             y1 = self.m(x)
             y2 = self.m(y1)
             return self.cv2(torch.cat([x, y1, y2, self.m(y2)], 1))
-elif os.getenv('RKNN_model_hack', '0') == 'npu_1':
+elif os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
     class SPPF(nn.Module):
         # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher
         def __init__(self, c1, c2, k=5):  # equivalent to SPP(k=(5, 9, 13))
