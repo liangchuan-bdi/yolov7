@@ -7,14 +7,8 @@ import warnings
 sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 
 # activate rknn hack
-if len(sys.argv)>=3 and '--rknpu' in sys.argv:
-    _index = sys.argv.index('--rknpu')
-    if sys.argv[_index+1].upper() in ['RK1808', 'RV1109', 'RV1126','RK3399PRO']:
-        os.environ['RKNN_model_hack'] = 'npu_1'
-    elif sys.argv[_index+1].upper() in ['RK3566', 'RK3568', 'RK3588','RK3588S','RV1106','RV1103']:
-        os.environ['RKNN_model_hack'] = 'npu_2'
-    else:
-        assert False,"{} not recognized".format(sys.argv[_index+1])
+if '--rknpu' in sys.argv:
+    os.environ['RKNN_model_hack']='1'
 
 import torch
 import torch.nn as nn
@@ -45,7 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--include-nms', action='store_true', help='export end2end onnx')
     parser.add_argument('--fp16', action='store_true', help='CoreML FP16 half-precision export')
     parser.add_argument('--int8', action='store_true', help='CoreML INT8 quantization')
-    parser.add_argument('--rknpu', default=None, help='RKNN npu platform')
+    parser.add_argument('--rknpu', action='store_true', help='RKNN npu platform')
     opt = parser.parse_args()
     del opt.rknpu
     opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
@@ -78,13 +72,12 @@ if __name__ == '__main__':
         # elif isinstance(m, models.yolo.Detect):
         #     m.forward = m.forward_export  # assign forward (optional)
     model.model[-1].export = not opt.grid  # set Detect() layer grid export
-    if os.getenv('RKNN_model_hack', '0') != '0':
-        if os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
-            from models.common import SP
-            for k, m in model.named_modules():
-                if isinstance(m, SP) and m.m.kernel_size%2==1 and m.m.stride==1:
-                    new_sp = nn.Sequential(*[nn.MaxPool2d(3,1,1) for i in range(m.m.kernel_size//2)])
-                    m.m = new_sp
+    if os.getenv('RKNN_model_hack', '0') in ['1']:
+        from models.common import SP
+        for k, m in model.named_modules():
+            if isinstance(m, SP) and m.m.kernel_size%2==1 and m.m.stride==1:
+                new_sp = nn.Sequential(*[nn.MaxPool2d(3,1,1) for i in range(m.m.kernel_size//2)])
+                m.m = new_sp
 
         from models.yolo import Detect, IDetect
         if isinstance(model.model[-1], Detect) or isinstance(model.model[-1], IDetect):
@@ -104,36 +97,45 @@ if __name__ == '__main__':
         y = None
 
     # TorchScript export
+    # try:
+    #     print('\nStarting TorchScript export with torch %s...' % torch.__version__)
+    #     f = opt.weights.replace('.pt', '.torchscript.pt')  # filename
+    #     ts = torch.jit.trace(model, img, strict=False)
+    #     ts.save(f)
+    #     print('TorchScript export success, saved as %s' % f)
+    # except Exception as e:
+    #     print('TorchScript export failure: %s' % e)
+
+    # ONNX export 
     try:
-        print('\nStarting TorchScript export with torch %s...' % torch.__version__)
-        f = opt.weights.replace('.pt', '.torchscript.pt')  # filename
-        ts = torch.jit.trace(model, img, strict=False)
-        ts.save(f)
-        print('TorchScript export success, saved as %s' % f)
+        print('\nStarting onnx export with torch %s...' % torch.__version__)
+        f = opt.weights.replace('.pt', '.onnx')  # filename
+        torch.onnx.export(model, img, f, verbose=False, opset_version=12, input_names=['images'],)
+        print('ONNX export success, saved as %s' % f)
     except Exception as e:
-        print('TorchScript export failure: %s' % e)
+        print('ONNX export failure: %s' % e)
 
-    # CoreML export
-    try:
-        import coremltools as ct
+    # # CoreML export
+    # try:
+    #     import coremltools as ct
 
-        print('\nStarting CoreML export with coremltools %s...' % ct.__version__)
-        # convert model from torchscript and apply pixel scaling as per detect.py
-        ct_model = ct.convert(ts, inputs=[ct.ImageType('image', shape=img.shape, scale=1 / 255.0, bias=[0, 0, 0])])
-        bits, mode = (8, 'kmeans_lut') if opt.int8 else (16, 'linear') if opt.fp16 else (32, None)
-        if bits < 32:
-            if sys.platform.lower() == 'darwin':  # quantization only supported on macOS
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=DeprecationWarning)  # suppress numpy==1.20 float warning
-                    ct_model = ct.models.neural_network.quantization_utils.quantize_weights(ct_model, bits, mode)
-            else:
-                print('quantization only supported on macOS, skipping...')
+    #     print('\nStarting CoreML export with coremltools %s...' % ct.__version__)
+    #     # convert model from torchscript and apply pixel scaling as per detect.py
+    #     ct_model = ct.convert(ts, inputs=[ct.ImageType('image', shape=img.shape, scale=1 / 255.0, bias=[0, 0, 0])])
+    #     bits, mode = (8, 'kmeans_lut') if opt.int8 else (16, 'linear') if opt.fp16 else (32, None)
+    #     if bits < 32:
+    #         if sys.platform.lower() == 'darwin':  # quantization only supported on macOS
+    #             with warnings.catch_warnings():
+    #                 warnings.filterwarnings("ignore", category=DeprecationWarning)  # suppress numpy==1.20 float warning
+    #                 ct_model = ct.models.neural_network.quantization_utils.quantize_weights(ct_model, bits, mode)
+    #         else:
+    #             print('quantization only supported on macOS, skipping...')
 
-        f = opt.weights.replace('.pt', '.mlmodel')  # filename
-        ct_model.save(f)
-        print('CoreML export success, saved as %s' % f)
-    except Exception as e:
-        print('CoreML export failure: %s' % e)
+    #     f = opt.weights.replace('.pt', '.mlmodel')  # filename
+    #     ct_model.save(f)
+    #     print('CoreML export success, saved as %s' % f)
+    # except Exception as e:
+    #     print('CoreML export failure: %s' % e)
                      
     # TorchScript-Lite export
     '''

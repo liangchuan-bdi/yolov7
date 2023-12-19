@@ -207,7 +207,7 @@ if os.getenv('RKNN_model_hack', '0') == '0':
         def forward(self, x):
             x = self.cv1(x)
             return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
-elif os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
+elif os.getenv('RKNN_model_hack', '0') in ['1']:
     # TODO remove this hack when rknn-toolkit1/2 add this optimize rules
     class SPP(nn.Module):
         def __init__(self, c1, c2, k=(5, 9, 13)):
@@ -304,7 +304,7 @@ if os.getenv('RKNN_model_hack', '0') == '0':
             y1 = self.cv6(self.cv5(torch.cat([x1] + [m(x1) for m in self.m], 1)))
             y2 = self.cv2(x)
             return self.cv7(torch.cat((y1, y2), dim=1))
-elif os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
+elif os.getenv('RKNN_model_hack', '0') in ['1']:
     # TODO remove this hack when rknn-toolkit1/2 add this optimize rules
     class SPPCSPC(nn.Module):
         # CSP https://github.com/WongKinYiu/CrossStagePartialNetworks
@@ -878,7 +878,7 @@ if os.getenv('RKNN_model_hack', '0') in ['0']:
             y1 = self.m(x)
             y2 = self.m(y1)
             return self.cv2(torch.cat([x, y1, y2, self.m(y2)], 1))
-elif os.getenv('RKNN_model_hack', '0') in ['npu_1', 'npu_2']:
+elif os.getenv('RKNN_model_hack', '0') in ['1']:
     class SPPF(nn.Module):
         # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher
         def __init__(self, c1, c2, k=5):  # equivalent to SPP(k=(5, 9, 13))
